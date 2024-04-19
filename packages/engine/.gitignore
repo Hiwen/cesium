@@ -10,3 +10,4 @@ Source/ThirdParty/Workers/draco_decoder_nodejs.js
 Source/ThirdParty/Workers/pako_inflate.min.js
 Source/ThirdParty/Workers/pako_deflate.min.js
 Source/ThirdParty/Workers/z-worker-pako.js
+node_modules
