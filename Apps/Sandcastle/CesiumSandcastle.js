@@ -1225,7 +1225,7 @@ require({
   }
 
   const newInLabel = `New in ${VERSION}`;
-  function loadDemoFromFile(demo) {
+  function loadDemoFromFile(demo, sn) {
     return requestDemo(demo.name).then(function (value) {
       // Store the file contents for later searching.
       demo.code = value;
@@ -1272,7 +1272,7 @@ require({
         content: demo.description.replace(/\\n/g, "<br/>"),
       });
 
-      addFileToTab(demo);
+      addFileToTab(demo, sn);
       return demo;
     });
   }
@@ -1299,10 +1299,10 @@ require({
     parentTab.appendChild(galleryButton);
   }
 
-  function addFileToGallery(demo) {
+  function addFileToGallery(demo, sn) {
     const searchDemos = dom.byId("searchDemos");
     insertSortedById(searchDemos, createGalleryButton(demo, "searchDemo"));
-    return loadDemoFromFile(demo);
+    return loadDemoFromFile(demo, sn);
   }
 
   function onShowCallback() {
@@ -1311,7 +1311,7 @@ require({
     };
   }
 
-  function addFileToTab(demo) {
+  function addFileToTab(demo, sn) {
     if (demo.label !== "") {
       const labels = demo.label.split(",");
       for (let j = 0; j < labels.length; j++) {
@@ -1328,12 +1328,12 @@ require({
         }
         const tabName = `${label}Demos`;
         const tab = dom.byId(tabName);
-        insertSortedById(tab, createGalleryButton(demo, tabName));
+        insertSortedById(tab, createGalleryButton(demo, tabName, sn));
       }
     }
   }
 
-  function createGalleryButton(demo, tabName) {
+  function createGalleryButton(demo, tabName, sn) {
     let imgSrc = "templates/Gallery_tile.jpg";
     if (defined(demo.img)) {
       imgSrc = `gallery/${demo.img}`;
@@ -1364,7 +1364,7 @@ require({
           delete queryObject.code;
 
           window.history.pushState(demo, demo.name, getPushStateUrl(demo));
-          loadFromGallery(demo).then(function () {
+          loadFromGallery(demo, sn).then(function () {
             document.title = `${demo.name} - Cesium Sandcastle`;
           });
         }
@@ -1420,13 +1420,25 @@ require({
     }
 
     let i;
-    const len = gallery_demos.length;
+
+    const sorted_gallery_demos = gallery_demos.sort((a, b) => {
+      if (a.name.startsWith(b.name)) {
+        return -1;
+      }
+      if (b.name.startsWith(a.name)) {
+        return 1;
+      }
+
+      return a.name < b.name ? -1 : 1;
+    });
+
+    const len = sorted_gallery_demos.length;
 
     let queryInGalleryIndex = false;
     const queryName = queryObject.src.replace(".html", "");
     const promises = [];
     for (i = 0; i < len; ++i) {
-      promises.push(addFileToGallery(gallery_demos[i]));
+      promises.push(addFileToGallery(sorted_gallery_demos[i], i));
     }
 
     promise = all(promises).then(function (results) {
@@ -1451,9 +1463,9 @@ require({
 
       const demos = dom.byId("allDemos");
       for (i = 0; i < len; ++i) {
-        const demo = gallery_demos[i];
+        const demo = sorted_gallery_demos[i];
         if (!/Development/i.test(demo.label)) {
-          insertSortedById(demos, createGalleryButton(demo, "all"));
+          insertSortedById(demos, createGalleryButton(demo, "all", i));
         }
       }
 
