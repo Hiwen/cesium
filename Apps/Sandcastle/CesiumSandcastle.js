@@ -1374,7 +1374,7 @@ require({
 
     new LinkButton({
       label:
-        `<div class="demoTileTitle">${demo.name}</div>` +
+        `<div class="demoTileTitle">${sn + 1}:${demo.name}</div>` +
         `<img src="${imgSrc}" class="demoTileThumbnail" alt="" onDragStart="return false;" />`,
     }).placeAt(demoLink);
 
