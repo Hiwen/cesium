@@ -6,6 +6,83 @@ import destroyObject from "../Core/destroyObject.js";
 let nextShaderProgramId = 0;
 
 /**
+ * @private
+ * Builds the modules and pipeline descriptor shared by the constructor and createAsync.
+ *
+ * @param {object} options Validated options.
+ * @param {string} label The resolved pipeline label.
+ * @returns {{ vertexModule, fragmentModule, pipelineDescriptor }}
+ */
+function buildPipelineDescriptor(options, label) {
+  const webgpuContext = options.webgpuContext;
+  const device = webgpuContext.device;
+
+  const vertexModule = device.createShaderModule({
+    code: options.vertexShaderWGSL,
+    label: `${label}_vertex`,
+  });
+
+  const fragmentModule = device.createShaderModule({
+    code: options.fragmentShaderWGSL,
+    label: `${label}_fragment`,
+  });
+
+  const colorTargets = options.colorTargets ?? [
+    { format: webgpuContext.presentationFormat },
+  ];
+
+  const primitive = options.primitive ?? {
+    topology: "triangle-list",
+    cullMode: "none",
+  };
+
+  const pipelineDescriptor = {
+    label,
+    layout: options.layout ?? "auto",
+    vertex: {
+      module: vertexModule,
+      entryPoint: options.vertexEntryPoint ?? "vertexMain",
+      buffers: options.vertexState?.buffers ?? [],
+    },
+    fragment: {
+      module: fragmentModule,
+      entryPoint: options.fragmentEntryPoint ?? "fragmentMain",
+      targets: colorTargets,
+    },
+    primitive,
+    multisample: {
+      count: options.sampleCount ?? 1,
+    },
+  };
+
+  if (defined(options.depthStencil)) {
+    pipelineDescriptor.depthStencil = options.depthStencil;
+  }
+
+  return { vertexModule, fragmentModule, pipelineDescriptor };
+}
+
+/**
+ * @private
+ * Initializes the shared instance properties of a {@link WebGPUShaderProgram}.
+ */
+function initProgram(
+  instance,
+  pipeline,
+  vertexModule,
+  fragmentModule,
+  webgpuContext,
+  label,
+) {
+  instance._pipeline = pipeline;
+  instance._vertexModule = vertexModule;
+  instance._fragmentModule = fragmentModule;
+  instance._webgpuContext = webgpuContext;
+  instance._label = label;
+  instance.id = nextShaderProgramId++;
+}
+
+/**
  * A WebGPU render pipeline compiled from WGSL vertex and fragment shader sources.
  *
  * Unlike the WebGL-based {@link ShaderProgram}, which uses GLSL, this class uses
@@ -41,62 +118,20 @@ function WebGPUShaderProgram(options) {
   Check.typeOf.string("options.fragmentShaderWGSL", options.fragmentShaderWGSL);
   //>>includeEnd('debug');
 
-  const webgpuContext = options.webgpuContext;
-  const device = webgpuContext.device;
   const label = options.label ?? `WebGPUShaderProgram_${nextShaderProgramId}`;
+  const { vertexModule, fragmentModule, pipelineDescriptor } =
+    buildPipelineDescriptor(options, label);
 
-  const vertexModule = device.createShaderModule({
-    code: options.vertexShaderWGSL,
-    label: `${label}_vertex`,
-  });
-
-  const fragmentModule = device.createShaderModule({
-    code: options.fragmentShaderWGSL,
-    label: `${label}_fragment`,
-  });
-
-  const vertexEntryPoint = options.vertexEntryPoint ?? "vertexMain";
-  const fragmentEntryPoint = options.fragmentEntryPoint ?? "fragmentMain";
-  const sampleCount = options.sampleCount ?? 1;
-
-  const colorTargets = options.colorTargets ?? [
-    { format: webgpuContext.presentationFormat },
-  ];
-
-  const primitive = options.primitive ?? {
-    topology: "triangle-list",
-    cullMode: "none",
-  };
-
-  const pipelineDescriptor = {
+  const pipeline =
+    options.webgpuContext.device.createRenderPipeline(pipelineDescriptor);
+  initProgram(
+    this,
+    pipeline,
+    vertexModule,
+    fragmentModule,
+    options.webgpuContext,
     label,
-    layout: options.layout ?? "auto",
-    vertex: {
-      module: vertexModule,
-      entryPoint: vertexEntryPoint,
-      buffers: options.vertexState?.buffers ?? [],
-    },
-    fragment: {
-      module: fragmentModule,
-      entryPoint: fragmentEntryPoint,
-      targets: colorTargets,
-    },
-    primitive,
-    multisample: {
-      count: sampleCount,
-    },
-  };
-
-  if (defined(options.depthStencil)) {
-    pipelineDescriptor.depthStencil = options.depthStencil;
-  }
-
-  this._pipeline = device.createRenderPipeline(pipelineDescriptor);
-  this._vertexModule = vertexModule;
-  this._fragmentModule = fragmentModule;
-  this._webgpuContext = webgpuContext;
-  this._label = label;
-  this.id = nextShaderProgramId++;
+  );
 }
 
 /**
@@ -117,87 +152,26 @@ WebGPUShaderProgram.createAsync = async function (options) {
   Check.typeOf.string("options.fragmentShaderWGSL", options.fragmentShaderWGSL);
   //>>includeEnd('debug');
 
-  const webgpuContext = options.webgpuContext;
-  const device = webgpuContext.device;
   const label = options.label ?? `WebGPUShaderProgram_${nextShaderProgramId}`;
+  const { vertexModule, fragmentModule, pipelineDescriptor } =
+    buildPipelineDescriptor(options, label);
 
-  const vertexModule = device.createShaderModule({
-    code: options.vertexShaderWGSL,
-    label: `${label}_vertex`,
-  });
+  const pipeline =
+    await options.webgpuContext.device.createRenderPipelineAsync(
+      pipelineDescriptor,
+    );
 
-  const fragmentModule = device.createShaderModule({
-    code: options.fragmentShaderWGSL,
-    label: `${label}_fragment`,
-  });
-
-  const vertexEntryPoint = options.vertexEntryPoint ?? "vertexMain";
-  const fragmentEntryPoint = options.fragmentEntryPoint ?? "fragmentMain";
-  const sampleCount = options.sampleCount ?? 1;
-
-  const colorTargets = options.colorTargets ?? [
-    { format: webgpuContext.presentationFormat },
-  ];
-
-  const primitive = options.primitive ?? {
-    topology: "triangle-list",
-    cullMode: "none",
-  };
-
-  const pipelineDescriptor = {
-    label,
-    layout: options.layout ?? "auto",
-    vertex: {
-      module: vertexModule,
-      entryPoint: vertexEntryPoint,
-      buffers: options.vertexState?.buffers ?? [],
-    },
-    fragment: {
-      module: fragmentModule,
-      entryPoint: fragmentEntryPoint,
-      targets: colorTargets,
-    },
-    primitive,
-    multisample: {
-      count: sampleCount,
-    },
-  };
-
-  if (defined(options.depthStencil)) {
-    pipelineDescriptor.depthStencil = options.depthStencil;
-  }
-
-  const pipeline = await device.createRenderPipelineAsync(pipelineDescriptor);
-
-  const program = new WebGPUShaderProgram.__internal(
+  const program = Object.create(WebGPUShaderProgram.prototype);
+  initProgram(
+    program,
     pipeline,
     vertexModule,
     fragmentModule,
-    webgpuContext,
+    options.webgpuContext,
     label,
   );
   return program;
 };
-
-/**
- * @private
- * Internal constructor for use by createAsync.
- */
-WebGPUShaderProgram.__internal = function (
-  pipeline,
-  vertexModule,
-  fragmentModule,
-  webgpuContext,
-  label,
-) {
-  this._pipeline = pipeline;
-  this._vertexModule = vertexModule;
-  this._fragmentModule = fragmentModule;
-  this._webgpuContext = webgpuContext;
-  this._label = label;
-  this.id = nextShaderProgramId++;
-};
-WebGPUShaderProgram.__internal.prototype = WebGPUShaderProgram.prototype;
 
 Object.defineProperties(WebGPUShaderProgram.prototype, {
   /**

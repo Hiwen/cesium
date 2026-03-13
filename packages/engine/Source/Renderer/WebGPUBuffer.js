@@ -1,9 +1,10 @@
 import Check from "../Core/Check.js";
-import createGuid from "../Core/createGuid.js";
 import Frozen from "../Core/Frozen.js";
 import defined from "../Core/defined.js";
 import destroyObject from "../Core/destroyObject.js";
 import DeveloperError from "../Core/DeveloperError.js";
+
+let nextBufferId = 0;
 
 /**
  * A GPU buffer backed by a WebGPU <code>GPUBuffer</code>.
@@ -82,7 +83,7 @@ function WebGPUBuffer(options) {
     gpuBuffer.unmap();
   }
 
-  this._id = createGuid();
+  this._id = nextBufferId++;
   this._webgpuContext = webgpuContext;
   this._device = device;
   this._buffer = gpuBuffer;
@@ -185,7 +186,7 @@ Object.defineProperties(WebGPUBuffer.prototype, {
   /**
    * The unique identifier for this buffer.
    * @memberof WebGPUBuffer.prototype
-   * @type {string}
+   * @type {number}
    * @readonly
    */
   id: {
