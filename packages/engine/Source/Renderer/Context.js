@@ -30,6 +30,7 @@ import Texture from "./Texture.js";
 import TextureCache from "./TextureCache.js";
 import UniformState from "./UniformState.js";
 import VertexArray from "./VertexArray.js";
+import WebGPUContext from "./WebGPUContext.js";
 
 /**
  * @private
@@ -48,6 +49,7 @@ function Context(canvas, options) {
     requestWebgl1,
     webgl: webglOptions = {},
     allowTextureFilterAnisotropic = true,
+    webgpuContext: providedWebGPUContext,
   } = options ?? {};
 
   // Override select WebGL defaults
@@ -69,6 +71,9 @@ function Context(canvas, options) {
   this._gl = glContext;
   this._webgl2 = webgl2;
   this._id = createGuid();
+
+  // Store any provided WebGPU context (see Context.createWithWebGPU).
+  this._webgpuContext = providedWebGPUContext ?? undefined;
 
   // Validation and logging disabled by default for speed.
   this.validateFramebuffer = false;
@@ -371,6 +376,7 @@ function Context(canvas, options) {
     requestWebgl1: requestWebgl1,
     webgl: webglOptions,
     allowTextureFilterAnisotropic: allowTextureFilterAnisotropic,
+    webgpuContext: providedWebGPUContext,
   };
 
   /**
@@ -402,6 +408,9 @@ function Context(canvas, options) {
  * @property {boolean} [allowTextureFilterAnisotropic=true] If true, use anisotropic filtering during texture sampling
  * @property {WebGLOptions} [webgl] WebGL options to be passed on to canvas.getContext
  * @property {Function} [getWebGLStub] A function to create a WebGL stub for testing
+ * @property {WebGPUContext} [webgpuContext] An initialized {@link WebGPUContext} to attach to this
+ *   context. When provided, the context exposes WebGPU capabilities alongside WebGL.
+ *   Use {@link Context.createWithWebGPU} to create a context with WebGPU automatically initialized.
  */
 
 /**
@@ -583,6 +592,19 @@ Object.defineProperties(Context.prototype, {
   webgl2: {
     get: function () {
       return this._webgl2;
+    },
+  },
+  /**
+   * The {@link WebGPUContext} associated with this context, or <code>undefined</code>
+   * if WebGPU was not initialized. Use {@link Context.createWithWebGPU} to create a
+   * context with WebGPU support.
+   * @memberof Context.prototype
+   * @type {WebGPUContext|undefined}
+   * @readonly
+   */
+  webgpuContext: {
+    get: function () {
+      return this._webgpuContext;
     },
   },
   canvas: {
@@ -1747,7 +1769,60 @@ Context.prototype.destroy = function () {
     this._defaultNormalTexture && this._defaultNormalTexture.destroy();
   this._defaultCubeMap = this._defaultCubeMap && this._defaultCubeMap.destroy();
 
+  if (defined(this._webgpuContext)) {
+    this._webgpuContext = this._webgpuContext.destroy();
+  }
+
   return destroyObject(this);
+};
+
+/**
+ * Returns <code>true</code> if WebGPU is supported by the current browser environment.
+ *
+ * This check is synchronous and does not guarantee that a GPU adapter can be obtained.
+ * Call {@link Context.createWithWebGPU} to perform the full async initialization.
+ *
+ * @returns {boolean} <code>true</code> if <code>navigator.gpu</code> is available.
+ */
+Context.supportsWebGPU = function () {
+  return WebGPUContext.isSupported();
+};
+
+/**
+ * Asynchronously creates a {@link Context} with an initialized {@link WebGPUContext}.
+ *
+ * The returned context has both WebGL (for backward compatibility) and WebGPU
+ * capabilities. Access the WebGPU device and resources via {@link Context#webgpuContext}.
+ *
+ * @param {HTMLCanvasElement} canvas The canvas element for the context.
+ * @param {ContextOptions} [options] Options forwarded to the {@link Context} constructor.
+ * @param {object} [webgpuOptions] Options forwarded to {@link WebGPUContext.create}.
+ * @param {string} [webgpuOptions.powerPreference="high-performance"] Power preference for the GPU adapter.
+ * @param {boolean} [webgpuOptions.alpha=false] Whether the swap chain supports alpha blending.
+ * @param {string[]} [webgpuOptions.requiredFeatures=[]] WebGPU device features to enable.
+ * @returns {Promise<Context>} A promise that resolves to the initialized context.
+ *
+ * @example
+ * // Create a context with both WebGL and WebGPU support
+ * const context = await Context.createWithWebGPU(canvas);
+ * if (context.webgpuContext) {
+ *   const device = context.webgpuContext.device;
+ *   // Use WebGPU APIs ...
+ * }
+ */
+Context.createWithWebGPU = async function (canvas, options, webgpuOptions) {
+  if (!WebGPUContext.isSupported()) {
+    throw new RuntimeError(
+      "WebGPU is not supported in this browser. Visit https://caniuse.com/webgpu for browser compatibility.",
+    );
+  }
+
+  const gpuContext = await WebGPUContext.create(canvas, webgpuOptions);
+
+  const contextOptions = options ?? {};
+  contextOptions.webgpuContext = gpuContext;
+
+  return new Context(canvas, contextOptions);
 };
 
 export default Context;
