@@ -12,6 +12,16 @@
 
 - Added experimental, performance-focused vector primitive APIs: `BufferPointCollection`, `BufferPolylineCollection`, and `BufferPolygonCollection`. [#13212](https://github.com/CesiumGS/cesium/pull/13212)
 - Added support for Reality Data of type `ITwinPlatform.RealityDataType.GaussianSplat3DTiles` to `ITwinData.createTilesetForRealityDataId`. [#13208](https://github.com/CesiumGS/cesium/pull/13208)
+- Added experimental **WebGPU rendering infrastructure**:
+  - `WebGPUContext` — asynchronous WebGPU adapter/device/canvas context manager. Use `WebGPUContext.create(canvas)` to initialize.
+  - `WebGPUBuffer` — GPU buffer wrapper with `createVertexBuffer`, `createIndexBuffer`, and `createUniformBuffer` factories.
+  - `WebGPUShaderProgram` — WebGPU render pipeline compiled from WGSL shaders, with sync and async (`createAsync`) creation modes.
+  - `WebGPURenderPipeline` — executes Cesium `DrawCommand` objects via WebGPU render passes, with automatic uniform buffer management.
+  - `GlslToWgsl` — best-effort GLSL-to-WGSL transpiler for Cesium shaders, including type mapping, built-in renames, `czm_` automatic uniform struct generation, texture/sampler conversion, and varying struct creation.
+  - `Context.supportsWebGPU()` — synchronous browser WebGPU capability check.
+  - `Context.createWithWebGPU(canvas, options)` — async factory that initializes both WebGL and WebGPU contexts together.
+  - `Context#webgpuContext` — access the attached `WebGPUContext` instance.
+  - New Sandcastle demo: **WebGPU** — demonstrates browser detection, context creation, a colored WGSL triangle, and live GLSL→WGSL translation output.
 
 #### Fixes :wrench:
 
