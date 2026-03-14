@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no"
+    />
+    <meta
+      name="description"
+      content="Demonstrates WebGPU support in CesiumJS, including browser detection, context creation, and a simple triangle rendered with WGSL shaders."
+    />
+    <meta name="cesium-sandcastle-labels" content="Showcases, WebGPU" />
+    <title>Cesium Demo</title>
+    <script type="text/javascript" src="../Sandcastle-header.js"></script>
+    <script
+      type="text/javascript"
+      src="../../../Build/CesiumUnminified/Cesium.js"
+      nomodule
+    ></script>
+    <script type="module" src="../load-cesium-es6.js"></script>
+  </head>
+  <body class="sandcastle-loading" data-sandcastle-bucket="bucket-requirejs.html">
+    <style>
+      @import url(../templates/bucket.css);
+
+      #statusBar {
+        position: absolute;
+        top: 5px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 14px;
+        pointer-events: none;
+        z-index: 100;
+      }
+      #statusBar.error {
+        background: rgba(180, 30, 30, 0.85);
+      }
+      #statusBar.success {
+        background: rgba(30, 100, 30, 0.85);
+      }
+      #gpuCanvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 10;
+        display: none;
+      }
+    </style>
+    <div id="cesiumContainer" class="fullSize"></div>
+    <canvas id="gpuCanvas"></canvas>
+    <div id="statusBar">Checking WebGPU support…</div>
+    <div id="loadingOverlay"><h1>Loading...</h1></div>
+    <div id="toolbar"></div>
+    <script id="cesium_sandcastle_script">
+      window.startup = async function (Cesium) {
+        "use strict";
+        //Sandcastle_Begin
+
+        // ── Utility ──────────────────────────────────────────────────────────
+        const statusBar = document.getElementById("statusBar");
+        function setStatus(msg, type) {
+          statusBar.textContent = msg;
+          statusBar.className = type ?? "";
+        }
+
+        // ── Step 1: Check WebGPU support ─────────────────────────────────────
+        if (!Cesium.Context.supportsWebGPU()) {
+          setStatus(
+            "❌ WebGPU is NOT supported in this browser. Please use Chrome ≥ 113 / Edge ≥ 113 with WebGPU enabled.",
+            "error",
+          );
+
+          // Fall back to a normal CesiumJS globe
+          const viewer = new Cesium.Viewer("cesiumContainer");
+          viewer.scene.camera.flyHome(0);
+          //Sandcastle_End
+          return;
+        }
+
+        setStatus("✅ WebGPU supported. Initialising…");
+
+        // ── Step 2: Show a standard Cesium globe alongside WebGPU ────────────
+        const viewer = new Cesium.Viewer("cesiumContainer");
+
+        // ── Step 3: Create a WebGPU context via the Cesium API ───────────────
+        // We use a dedicated overlay canvas so the WebGPU triangle is drawn
+        // on top of the Cesium globe without interfering with its WebGL context.
+        const gpuCanvas = document.getElementById("gpuCanvas");
+        gpuCanvas.width = gpuCanvas.offsetWidth;
+        gpuCanvas.height = gpuCanvas.offsetHeight;
+        gpuCanvas.style.display = "block";
+
+        let webgpuContext;
+        try {
+          webgpuContext = await Cesium.WebGPUContext.create(gpuCanvas, {
+            powerPreference: "high-performance",
+            alpha: true,
+          });
+        } catch (e) {
+          setStatus(`❌ WebGPU context creation failed: ${e.message}`, "error");
+          return;
+        }
+
+        const device = webgpuContext.device;
+        const presentationFormat = webgpuContext.presentationFormat;
+
+        setStatus("✅ WebGPU device acquired. Compiling shaders…");
+
+        // ── Step 4: Write a simple WGSL shader pair ───────────────────────────
+        // This triangle is drawn in NDC space without any uniforms.
+        // The czm uniform struct header is included for completeness (it is the
+        // same header that the GlslToWgsl transpiler prepends to every shader).
+        const czmHeader = Cesium.GlslToWgsl.getCzmUniformStructWgsl();
+
+        const vertexWgsl = /* wgsl */ `
+${czmHeader}
+struct VertexOutput {
+  @builtin(position) position : vec4f,
+  @location(0) color : vec4f,
+};
+
+@vertex
+fn vertexMain(@builtin(vertex_index) vi : u32) -> VertexOutput {
+  // Equilateral triangle in NDC
+  var positions = array<vec2f, 3>(
+    vec2f( 0.0,  0.5),
+    vec2f(-0.5, -0.5),
+    vec2f( 0.5, -0.5),
+  );
+  var colors = array<vec4f, 3>(
+    vec4f(1.0, 0.2, 0.2, 0.9),
+    vec4f(0.2, 1.0, 0.2, 0.9),
+    vec4f(0.2, 0.2, 1.0, 0.9),
+  );
+  var output : VertexOutput;
+  output.position = vec4f(positions[vi], 0.0, 1.0);
+  output.color    = colors[vi];
+  return output;
+}
+`;
+
+        const fragmentWgsl = /* wgsl */ `
+struct VertexOutput {
+  @builtin(position) position : vec4f,
+  @location(0) color : vec4f,
+};
+
+@fragment
+fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
+  return input.color;
+}
+`;
+
+        // ── Step 5: Create a WebGPUShaderProgram ─────────────────────────────
+        let shaderProgram;
+        try {
+          shaderProgram = await Cesium.WebGPUShaderProgram.createAsync({
+            webgpuContext,
+            vertexShaderWGSL: vertexWgsl,
+            fragmentShaderWGSL: fragmentWgsl,
+            colorTargets: [
+              {
+                format: presentationFormat,
+                blend: {
+                  color: {
+                    srcFactor: "src-alpha",
+                    dstFactor: "one-minus-src-alpha",
+                    operation: "add",
+                  },
+                  alpha: {
+                    srcFactor: "one",
+                    dstFactor: "one-minus-src-alpha",
+                    operation: "add",
+                  },
+                },
+              },
+            ],
+          });
+        } catch (e) {
+          setStatus(`❌ Shader compilation failed: ${e.message}`, "error");
+          return;
+        }
+
+        // Check for compilation errors
+        const compiledOk = await shaderProgram.checkCompilation();
+        if (!compiledOk) {
+          setStatus("❌ WGSL shader has errors (see console).", "error");
+          return;
+        }
+
+        setStatus("✅ WebGPU triangle rendered via Cesium WebGPU API!", "success");
+
+        // ── Step 6: Render loop ───────────────────────────────────────────────
+        function frame() {
+          const encoder = webgpuContext.createCommandEncoder({
+            label: "FrameEncoder",
+          });
+
+          const colorView = webgpuContext.getCurrentTextureView();
+
+          const pass = encoder.beginRenderPass({
+            colorAttachments: [
+              {
+                view: colorView,
+                clearValue: { r: 0, g: 0, b: 0, a: 0 },
+                loadOp: "clear",
+                storeOp: "store",
+              },
+            ],
+          });
+
+          pass.setPipeline(shaderProgram.pipeline);
+          pass.draw(3, 1, 0, 0);
+          pass.end();
+
+          webgpuContext.submitCommandBuffers([encoder.finish()]);
+          requestAnimationFrame(frame);
+        }
+
+        requestAnimationFrame(frame);
+
+        // ── Step 7: Show GLSL→WGSL translation info in the toolbar ───────────
+        const toolbar = document.getElementById("toolbar");
+
+        const simpleGlslVS = `
+in vec4 position;
+in vec2 textureCoordinates;
+out vec2 v_textureCoordinates;
+void main() {
+    gl_Position = czm_modelViewProjection * position;
+    v_textureCoordinates = textureCoordinates;
+}`;
+
+        const simpleGlslFS = `
+uniform sampler2D u_diffuse;
+in vec2 v_textureCoordinates;
+void main() {
+    out_FragColor = texture(u_diffuse, v_textureCoordinates);
+}`;
+
+        let translated;
+        try {
+          translated = Cesium.GlslToWgsl.glslPairToWgsl(simpleGlslVS, simpleGlslFS);
+        } catch (e) {
+          translated = {
+            vertexWgsl: `// Translation error: ${e.message}`,
+            fragmentWgsl: "",
+          };
+        }
+
+        const info = document.createElement("div");
+        info.style.cssText =
+          "position:absolute;right:10px;top:40px;background:rgba(0,0,0,0.8);color:#cfc;padding:10px;font-family:monospace;font-size:11px;max-width:500px;max-height:80vh;overflow:auto;border-radius:4px;";
+        const vertexWgslEscaped = translated.vertexWgsl.replace(/</g, "&lt;");
+        const fragmentWgslEscaped = translated.fragmentWgsl.replace(/</g, "&lt;");
+        info.innerHTML = `<b>GLSL &rarr; WGSL Translation Demo</b><br><br><b>Vertex WGSL (translated):</b><pre style='margin:0;white-space:pre-wrap'>${vertexWgslEscaped}</pre><br><b>Fragment WGSL (translated):</b><pre style='margin:0;white-space:pre-wrap'>${fragmentWgslEscaped}</pre>`;
+        document.body.appendChild(info);
+
+        //Sandcastle_End
+      };
+
+      if (typeof Cesium !== "undefined") {
+        window.startupCalled = true;
+        window.startup(Cesium).catch((error) => {
+          "use strict";
+          console.error(error);
+        });
+        Sandcastle.finishedLoading();
+      }
+    </script>
+  </body>
+</html>
