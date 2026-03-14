@@ -439,25 +439,10 @@ function fixBuiltinFunctions(src) {
 /**
  * Wraps the GLSL `void main()` body into a proper WGSL entry-point function.
  *
- * For vertex shaders:
- * ```wgsl
- * @vertex
- * fn vertexMain(input: VertexInput) -> VertexOutput {
- *   var output: VertexOutput;
- *   // ... translated body ...
- *   return output;
- * }
- * ```
- *
- * For fragment shaders:
- * ```wgsl
- * @fragment
- * fn fragmentMain(input: VertexOutput) -> FragmentOutput {
- *   var output: FragmentOutput;
- *   // ... translated body ...
- *   return output;
- * }
- * ```
+ * For vertex shaders the result is a function named <code>vertexMain</code> with the
+ * <code>vertex</code> stage attribute, taking a <code>VertexInput</code> and returning a
+ * <code>VertexOutput</code>.  For fragment shaders the result is <code>fragmentMain</code>
+ * with the <code>fragment</code> stage attribute.
  *
  * @param {string} src Source with the `void main() { ... }` block.
  * @param {boolean} isVertex

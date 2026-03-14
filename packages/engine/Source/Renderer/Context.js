@@ -408,7 +408,7 @@ function Context(canvas, options) {
  * @property {boolean} [allowTextureFilterAnisotropic=true] If true, use anisotropic filtering during texture sampling
  * @property {WebGLOptions} [webgl] WebGL options to be passed on to canvas.getContext
  * @property {Function} [getWebGLStub] A function to create a WebGL stub for testing
- * @property {WebGPUContext} [webgpuContext] An initialized {@link WebGPUContext} to attach to this
+ * @property {object} [webgpuContext] An initialized {@link WebGPUContext} to attach to this
  *   context. When provided, the context exposes WebGPU capabilities alongside WebGL.
  *   Use {@link Context.createWithWebGPU} to create a context with WebGPU automatically initialized.
  */
@@ -599,7 +599,7 @@ Object.defineProperties(Context.prototype, {
    * if WebGPU was not initialized. Use {@link Context.createWithWebGPU} to create a
    * context with WebGPU support.
    * @memberof Context.prototype
-   * @type {WebGPUContext|undefined}
+   * @type {object|undefined}
    * @readonly
    */
   webgpuContext: {

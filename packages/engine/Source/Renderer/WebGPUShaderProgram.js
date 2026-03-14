@@ -6,12 +6,12 @@ import destroyObject from "../Core/destroyObject.js";
 let nextShaderProgramId = 0;
 
 /**
- * @private
  * Builds the modules and pipeline descriptor shared by the constructor and createAsync.
  *
  * @param {object} options Validated options.
  * @param {string} label The resolved pipeline label.
  * @returns {{ vertexModule, fragmentModule, pipelineDescriptor }}
+ * @private
  */
 function buildPipelineDescriptor(options, label) {
   const webgpuContext = options.webgpuContext;
@@ -63,8 +63,9 @@ function buildPipelineDescriptor(options, label) {
 }
 
 /**
- * @private
  * Initializes the shared instance properties of a {@link WebGPUShaderProgram}.
+ *
+ * @private
  */
 function initProgram(
   instance,
